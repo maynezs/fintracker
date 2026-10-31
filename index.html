@@ -71,7 +71,7 @@ body{
 .hs b{font-size:13.5px;font-weight:700}
 
 /* ---------- month nav ---------- */
-.monthnav{display:flex;align-items:center;justify-content:space-between;margin:6px 0 12px}
+.monthnav{display:flex;align-items:center;justify-content:space-between;margin:6px 0 8px}
 .monthnav button{
   width:36px;height:36px;border-radius:13px;border:none;background:#fff;
   box-shadow:var(--shadow);font-size:17px;color:var(--accent);cursor:pointer;
@@ -79,6 +79,16 @@ body{
 }
 .monthnav button:active{transform:scale(.92)}
 .monthnav span{font-weight:700;font-size:14.5px;text-transform:capitalize}
+
+/* ---------- month summary ---------- */
+.month-sum{
+  display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
+  margin:0 4px 12px;
+}
+.month-sum b{font-weight:800;letter-spacing:-.3px}
+.month-sum b.inc{color:var(--green)}
+.month-sum b.exp{color:var(--red)}
+.month-sum b.bal{margin-left:auto;color:var(--text);font-size:13px}
 
 /* ---------- transactions ---------- */
 .day-head{font-size:11.5px;color:var(--muted);font-weight:700;margin:16px 4px 8px;text-transform:capitalize;letter-spacing:.2px}
@@ -134,6 +144,8 @@ body{
 .loan-actions button.acc{background:rgba(108,92,231,.1);color:var(--accent)}
 .loan-next{font-size:11px;color:var(--muted);text-align:center;margin:-4px 0 12px}
 .loan-next b{color:var(--accent);font-weight:700}
+.loan-note{font-size:11px;color:#9aa0b8;text-align:center;margin:-4px 0 12px}
+.loan-note b{color:var(--accent);font-weight:700}
 
 /* ---------- analytics ---------- */
 .donut-wrap{display:flex;justify-content:center;padding:4px 0 0}
@@ -147,6 +159,15 @@ body{
 .acat-top span:last-child{color:var(--muted);font-weight:700;white-space:nowrap}
 .acat-bar{height:6px;border-radius:4px;background:#f0f1f8;overflow:hidden}
 .acat-bar i{display:block;height:100%;border-radius:4px}
+
+/* ---------- year breakdown ---------- */
+.mstat{display:grid;grid-template-columns:46px 1fr 1fr 1fr;gap:6px;padding:8px 4px;font-size:12px;align-items:center;border-bottom:1px solid #f0f1f8}
+.mstat:last-child{border:none}
+.mstat-m{font-weight:700;color:var(--muted);font-size:11px;text-transform:capitalize}
+.mstat-v{font-weight:700;text-align:right;letter-spacing:-.2px}
+.mstat-v.inc{color:var(--green)}
+.mstat-v.exp{color:var(--red)}
+.mstat-bal{font-weight:800;text-align:right;letter-spacing:-.3px}
 
 /* ---------- empty ---------- */
 .empty{text-align:center;padding:44px 20px;color:var(--muted)}
@@ -237,6 +258,15 @@ input::placeholder{color:#b8bccf}
   overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
 }
 .catbtn.on{border-color:var(--accent);background:rgba(108,92,231,.08)}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{
+  padding:9px 13px;border-radius:12px;border:1.5px solid #eaecf5;background:#fff;
+  font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer;color:#5b6078;
+  transition:.15s;display:flex;align-items:center;gap:6px;line-height:1.2;
+}
+.chip.on{border-color:var(--accent);background:rgba(108,92,231,.08);color:var(--accent)}
+
 .emoji-grid{display:grid;grid-template-columns:repeat(10,1fr);gap:6px}
 .emoji-grid button{
   aspect-ratio:1;border-radius:11px;border:1.5px solid #eaecf5;background:#fff;font-size:17px;
@@ -295,7 +325,6 @@ input::placeholder{color:#b8bccf}
 <script>
 /* =========================================================
    Бюджет — одностраничное приложение
-   Данные хранятся в localStorage, внешних зависимостей нет.
    ========================================================= */
 
 /* ---------- 20 эмодзи на денежную тематику ---------- */
@@ -322,6 +351,7 @@ const pad = n => String(n).padStart(2,'0');
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
 const todayMonth = () => todayStr().slice(0,7);
 const fmt = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Number(n)||0)) + ' ₽';
+const fmt0 = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Number(n)||0));
 
 function monthLabel(m){
   const [y,mo] = m.split('-').map(Number);
@@ -331,6 +361,10 @@ function shiftMonth(m, d){
   const [y,mo] = m.split('-').map(Number);
   const dt = new Date(y, mo-1+d, 1);
   return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}`;
+}
+function shiftYear(m, d){
+  const [y,mo] = m.split('-').map(Number);
+  return `${y+d}-${pad(mo)}`;
 }
 function fmtDate(s){
   if (s === todayStr()) return 'Сегодня';
@@ -364,26 +398,35 @@ function makeDefault(){
 
 state = loadState() || makeDefault();
 
-const ui = { tab:'ops', month: todayMonth(), catType:'expense', anaType:'expense' };
+const ui = {
+  tab:'ops',
+  month: todayMonth(),
+  catType:'expense',
+  anaType:'expense',
+  anaPeriod:'month'   /* 'month' | 'year' */
+};
 
 /* ---------- доступ к данным ---------- */
 function catById(id){
   return state.categories.find(c => c.id === id) || {id:null, name:'Без категории', emoji:'❓'};
 }
+function isLoanCat(id){
+  const c = state.categories.find(x => x.id === id);
+  return !!(c && c.loanCat);
+}
 function ensureLoanCategory(){
   if (state.categories.some(c => c.loanCat)) return;
   state.categories.push({id:'cat_loans', name:'Кредиты', emoji:'🏦', type:'expense', loanCat:true});
 }
+function loanById(id){
+  return state.loans.find(l => l.id === id) || null;
+}
 
 /* =========================================================
    РАСЧЁТ КРЕДИТА
-   Учитывает:
-     • сумму, ставку, срок и дату первого платежа;
-     • сумму, уже внесённую до начала ведения учёта.
-   Если «уже внесено» указано — оно определяет, сколько
-   платежей по графику закрыто, остаток долга и ближайший платёж.
-   Если не указано — платежи до сегодняшней даты учитываются
-   автоматически по графику.
+   «Внесено» = ручная стартовая сумма + привязанные операции.
+   Если ни ручной суммы, ни операций нет — платежи
+   до сегодняшней даты учитываются автоматически по графику.
    ========================================================= */
 function calcLoan(l){
   const S = Number(l.amount) || 0;
@@ -409,48 +452,52 @@ function calcLoan(l){
   }
 
   const now = new Date(); now.setHours(23,59,59,999);
-
-  /* сколько платежей прошло по календарю (для отметок в графике) */
   let autoPaidCount = 0;
   for (let k = 0; k < n; k++){
     if (schedule[k].date <= now) autoPaidCount = k + 1;
     else break;
   }
 
-  /* сумма, уже внесённая пользователем (если задана) */
-  const rawPaid = l.paid;
-  const hasPaidInput = rawPaid !== '' && rawPaid != null && !isNaN(Number(rawPaid)) && Number(rawPaid) > 0;
-  const paidInput = hasPaidInput ? Number(rawPaid) : 0;
+  /* связанные операции */
+  const linked = state.transactions.filter(t => t.loanId === l.id && t.type === 'expense');
+  const linkedSum = linked.reduce((s,t) => s + Number(t.amount), 0);
+  const linkedCount = linked.length;
 
-  let paidCount, paidShown;
-  if (hasPaidInput){
-    /* сколько полных платежей по графику покрывает внесённая сумма */
+  const hasManual = l.paid !== '' && l.paid != null && !isNaN(Number(l.paid));
+  const manualPaid = hasManual ? Number(l.paid) : 0;
+  const hasLinked = linkedCount > 0;
+
+  let paidCount, paidShown, useAuto = false;
+  if (hasManual || hasLinked){
+    const inputPaid = Math.min(manualPaid + linkedSum, total);
     let cum = 0;
     paidCount = 0;
     for (let k = 0; k < n; k++){
-      if (cum + schedule[k].pay <= paidInput + 0.01){
+      if (cum + schedule[k].pay <= inputPaid + 0.01){
         cum += schedule[k].pay;
         paidCount = k + 1;
       } else break;
     }
-    paidShown = paidInput;
+    paidShown = inputPaid;
   } else {
     paidCount = autoPaidCount;
     paidShown = schedule.slice(0, paidCount).reduce((s,x) => s + x.pay, 0);
+    useAuto = true;
   }
 
-  const rest = paidCount > 0 ? schedule[paidCount-1].rest : S;
+  if (paidCount > n) paidCount = n;
+  const rest = paidCount >= n ? 0 : (paidCount > 0 ? schedule[paidCount-1].rest : S);
   const nextDate = paidCount < n ? schedule[paidCount].date : null;
 
   return {
     monthly, total, overpay: total - S,
-    paid: paidShown,          // отображаемая сумма «выплачено»
-    rest,                     // остаток основного долга
-    paidCount,                // сколько платежей закрыто
+    paid: paidShown,
+    manualPaid, linkedSum, linkedCount,
+    rest, paidCount,
     left: n - paidCount,
     pct: S > 0 ? Math.min(100, (S - rest) / S * 100) : 0,
     schedule, nextDate,
-    autoPaidCount
+    autoPaidCount, useAuto
   };
 }
 
@@ -468,13 +515,17 @@ function monthNavHTML(){
 
 /* ---------- Операции ---------- */
 function viewOps(){
-  const m = ui.month;
-  const txs = state.transactions.filter(t => t.date.startsWith(m));
-  const inc = txs.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount), 0);
-  const exp = txs.filter(t => t.type === 'expense').reduce((s,t) => s + Number(t.amount), 0);
-  const bal = inc - exp;
+  const allInc = state.transactions.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount), 0);
+  const allExp = state.transactions.filter(t => t.type === 'expense').reduce((s,t) => s + Number(t.amount), 0);
+  const allBal = allInc - allExp;
 
-  const sorted = [...txs].sort((a,b) => a.date < b.date ? 1 : a.date > b.date ? -1 : (b.createdAt||0) - (a.createdAt||0));
+  const m = ui.month;
+  const mtxs = state.transactions.filter(t => t.date.startsWith(m));
+  const mInc = mtxs.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount), 0);
+  const mExp = mtxs.filter(t => t.type === 'expense').reduce((s,t) => s + Number(t.amount), 0);
+  const mBal = mInc - mExp;
+
+  const sorted = [...mtxs].sort((a,b) => a.date < b.date ? 1 : a.date > b.date ? -1 : (b.createdAt||0) - (a.createdAt||0));
   const groups = new Map();
   for (const t of sorted){
     if (!groups.has(t.date)) groups.set(t.date, []);
@@ -485,18 +536,19 @@ function viewOps(){
   if (!sorted.length){
     list = `<div class="empty">
       <div class="empty-ic">🧾</div>
-      <p>Пока нет операций</p>
-      <small>Нажмите «+», чтобы добавить<br>первый доход или расход</small>
+      <p>В этом месяце нет операций</p>
+      <small>Нажмите «+», чтобы добавить<br>доход или расход</small>
     </div>`;
   } else {
     for (const [date, items] of groups){
       list += `<div class="day-head">${fmtDate(date)}</div>`;
       for (const t of items){
         const c = catById(t.categoryId);
+        const loan = t.loanId ? loanById(t.loanId) : null;
         list += `<div class="tx" data-act="edit-tx" data-id="${t.id}">
           <div class="tx-ico">${c.emoji}</div>
           <div style="min-width:0;flex:1">
-            <div class="tx-name">${esc(c.name)}</div>
+            <div class="tx-name">${esc(c.name)}${loan ? ' · ' + esc(loan.name) : ''}</div>
             ${t.comment ? `<div class="tx-sub">${esc(t.comment)}</div>` : ''}
           </div>
           <div class="tx-amt ${t.type}">${t.type === 'income' ? '+' : '−'}${fmt(t.amount)}</div>
@@ -507,14 +559,20 @@ function viewOps(){
 
   return `
     <div class="card hero">
-      <div class="hero-label">Баланс · ${monthLabel(m)}</div>
-      <div class="hero-value ${bal < 0 ? 'neg' : ''}">${bal < 0 ? '−' : ''}${fmt(Math.abs(bal))}</div>
+      <div class="hero-label">Общий баланс</div>
+      <div class="hero-value ${allBal < 0 ? 'neg' : ''}">${allBal < 0 ? '−' : ''}${fmt(Math.abs(allBal))}</div>
       <div class="hero-split">
-        <div class="hs"><span class="hs-dot inc"></span><div><small>Доходы</small><b>${fmt(inc)}</b></div></div>
-        <div class="hs"><span class="hs-dot exp"></span><div><small>Расходы</small><b>${fmt(exp)}</b></div></div>
+        <div class="hs"><span class="hs-dot inc"></span><div><small>Доходы</small><b>${fmt(allInc)}</b></div></div>
+        <div class="hs"><span class="hs-dot exp"></span><div><small>Расходы</small><b>${fmt(allExp)}</b></div></div>
       </div>
     </div>
     ${monthNavHTML()}
+    <div class="month-sum">
+      <span>За месяц:</span>
+      <b class="inc">+${fmt0(mInc)}</b>
+      <b class="exp">−${fmt0(mExp)}</b>
+      <b class="bal" style="color:${mBal<0?'var(--red)':'var(--text)'}">${mBal>=0?'+':'−'}${fmt0(Math.abs(mBal))}</b>
+    </div>
     ${list}`;
 }
 
@@ -586,6 +644,7 @@ function viewLoans(){
           ? `Следующий платёж: <b>${c.nextDate.toLocaleDateString('ru-RU',{day:'numeric', month:'long', year:'numeric'})}</b>`
           : 'Кредит выплачен полностью 🎉'}
       </div>
+      ${c.linkedCount ? `<div class="loan-note">Привязано платежей: <b>${c.linkedCount}</b> на ${fmt(c.linkedSum)}</div>` : ''}
       <div class="loan-actions">
         <button class="acc" data-act="loan-info" data-id="${l.id}">Аналитика</button>
         <button data-act="edit-loan" data-id="${l.id}">Изменить</button>
@@ -595,15 +654,57 @@ function viewLoans(){
 
   html += `<button class="btn primary" style="margin-top:4px" data-act="new-loan">+ Добавить кредит</button>
   <p style="font-size:11.5px;color:#a2a7bd;text-align:center;line-height:1.6;margin:14px 0 0">
-    Платежи по кредитам вносите как расходы<br>в категории «Кредиты» 🏦</p>`;
+    Платежи по кредитам вносите как расходы<br>в категории «Кредиты» 🏦 и привязывайте к нужному кредиту</p>`;
   return html;
 }
 
 /* ---------- Аналитика ---------- */
+function yearBreakdownHTML(year){
+  let rows = '';
+  let hasAny = false;
+  let tInc = 0, tExp = 0;
+
+  for (let m = 1; m <= 12; m++){
+    const mm = `${year}-${pad(m)}`;
+    const txs = state.transactions.filter(t => t.date.startsWith(mm));
+    const inc = txs.filter(t => t.type === 'income').reduce((s,t) => s + Number(t.amount), 0);
+    const exp = txs.filter(t => t.type === 'expense').reduce((s,t) => s + Number(t.amount), 0);
+    if (!inc && !exp) continue;
+    hasAny = true;
+    tInc += inc; tExp += exp;
+    const bal = inc - exp;
+    const label = new Date(year, m-1, 1).toLocaleDateString('ru-RU',{month:'short'});
+    rows += `<div class="mstat">
+      <span class="mstat-m">${label}</span>
+      <span class="mstat-v inc">${inc ? '+' + fmt0(inc) : '—'}</span>
+      <span class="mstat-v exp">${exp ? '−' + fmt0(exp) : '—'}</span>
+      <span class="mstat-bal" style="color:${bal<0?'var(--red)':'var(--green)'}">${bal>=0?'+':'−'}${fmt0(Math.abs(bal))}</span>
+    </div>`;
+  }
+
+  if (!hasAny) return '';
+
+  const tBal = tInc - tExp;
+  rows += `<div class="mstat" style="border-top:1.5px solid #e6e8f2;margin-top:4px;padding-top:10px">
+      <span class="mstat-m">Итого</span>
+      <span class="mstat-v inc">+${fmt0(tInc)}</span>
+      <span class="mstat-v exp">−${fmt0(tExp)}</span>
+      <span class="mstat-bal" style="color:${tBal<0?'var(--red)':'var(--green)'}">${tBal>=0?'+':'−'}${fmt0(Math.abs(tBal))}</span>
+    </div>`;
+
+  return `<div class="card" style="padding:14px 12px">
+    <h3 class="sub-h" style="margin:0 0 6px">По месяцам</h3>
+    ${rows}
+  </div>`;
+}
+
 function viewAnalytics(){
-  const m = ui.month;
+  const period = ui.anaPeriod;
   const type = ui.anaType;
-  const txs = state.transactions.filter(t => t.type === type && t.date.startsWith(m));
+  const year = ui.month.slice(0,4);
+  const prefix = period === 'year' ? year : ui.month;
+
+  const txs = state.transactions.filter(t => t.type === type && t.date.startsWith(prefix));
   const total = txs.reduce((s,t) => s + Number(t.amount), 0);
 
   const map = new Map();
@@ -619,16 +720,16 @@ function viewAnalytics(){
     .sort((a,b) => b.value - a.value);
 
   const incTotal = state.transactions
-    .filter(t => t.type === 'income' && t.date.startsWith(m))
+    .filter(t => t.type === 'income' && t.date.startsWith(prefix))
     .reduce((s,t) => s + Number(t.amount), 0);
   const expTotal = state.transactions
-    .filter(t => t.type === 'expense' && t.date.startsWith(m))
+    .filter(t => t.type === 'expense' && t.date.startsWith(prefix))
     .reduce((s,t) => s + Number(t.amount), 0);
 
   /* --- donut --- */
   let donut = '';
   if (!total){
-    donut = `<div class="empty" style="padding:30px 0"><div class="empty-ic">📊</div><p>Нет данных за месяц</p></div>`;
+    donut = `<div class="empty" style="padding:30px 0"><div class="empty-ic">📊</div><p>Нет данных за период</p></div>`;
   } else {
     const R = 54, C = 2 * Math.PI * R;
     let acc = 0;
@@ -662,6 +763,14 @@ function viewAnalytics(){
       </div>
     </div>`).join('');
 
+  const nav = period === 'year'
+    ? `<div class="monthnav">
+        <button data-act="year" data-d="-1" aria-label="Предыдущий год">‹</button>
+        <span>${year}</span>
+        <button data-act="year" data-d="1" aria-label="Следующий год">›</button>
+      </div>`
+    : monthNavHTML();
+
   return `
     <div class="card" style="display:flex;gap:10px">
       <div style="flex:1">
@@ -674,7 +783,11 @@ function viewAnalytics(){
         <div style="font-weight:800;font-size:15px;color:var(--red);letter-spacing:-.4px">${fmt(expTotal)}</div>
       </div>
     </div>
-    ${monthNavHTML()}
+    <div class="seg">
+      <button data-act="ana-period" data-p="month" class="${period === 'month' ? 'on' : ''}">Месяц</button>
+      <button data-act="ana-period" data-p="year" class="${period === 'year' ? 'on' : ''}">Год</button>
+    </div>
+    ${nav}
     <div class="seg">
       <button data-act="ana-type" data-type="expense" class="${type === 'expense' ? 'on' : ''}">Расходы</button>
       <button data-act="ana-type" data-type="income" class="${type === 'income' ? 'on' : ''}">Доходы</button>
@@ -682,7 +795,8 @@ function viewAnalytics(){
     <div class="card">
       ${donut}
       ${items.length ? `<div style="margin-top:6px">${bars}</div>` : ''}
-    </div>`;
+    </div>
+    ${period === 'year' ? yearBreakdownHTML(year) : ''}`;
 }
 
 /* =========================================================
@@ -720,13 +834,14 @@ function closeSheet(){
 backdropEl.addEventListener('click', closeSheet);
 
 /* =========================================================
-   ФОРМА ОПЕРАЦИИ
+   ФОРМА ОПЕРАЦИИ (с привязкой к кредиту)
    ========================================================= */
 function openTxSheet(tx){
   const isEdit = !!tx;
   const t = tx ? {...tx} : {type:'expense', amount:'', categoryId:null, date: todayStr(), comment:''};
   let type = t.type;
   let catId = t.categoryId || (state.categories.find(c => c.type === type) || {}).id || null;
+  let loanId = t.loanId || '';
 
   openSheet(`
     <div class="sheet-head">
@@ -746,6 +861,10 @@ function openTxSheet(tx){
         <span>Категория</span>
         <div class="catgrid" id="catgrid"></div>
       </div>
+      <div class="field" id="loanField" style="display:none">
+        <span>За какой кредит?</span>
+        <div class="chips" id="loanChips"></div>
+      </div>
       <label class="field">
         <span>Дата</span>
         <input id="txDate" type="date" value="${t.date}">
@@ -760,6 +879,21 @@ function openTxSheet(tx){
   `);
 
   const grid = document.getElementById('catgrid');
+  const loanField = document.getElementById('loanField');
+  const loanChips = document.getElementById('loanChips');
+
+  function paintLoanChips(){
+    if (!state.loans.length){
+      loanChips.innerHTML = '<div class="empty-sm" style="padding:4px">Сначала добавьте кредит в разделе «Кредиты»</div>';
+      return;
+    }
+    if (loanId && !state.loans.some(l => l.id === loanId)) loanId = '';
+    loanChips.innerHTML =
+      `<button type="button" class="chip ${!loanId ? 'on' : ''}" data-lid="">Общий платёж</button>` +
+      state.loans.map(l =>
+        `<button type="button" class="chip ${loanId === l.id ? 'on' : ''}" data-lid="${l.id}">🏦 ${esc(l.name)}</button>`
+      ).join('');
+  }
 
   function paint(){
     const cats = state.categories.filter(c => c.type === type);
@@ -768,6 +902,14 @@ function openTxSheet(tx){
       ? cats.map(c => `<button type="button" class="catbtn ${c.id === catId ? 'on' : ''}" data-cid="${c.id}">
            <span>${c.emoji}</span><small>${esc(c.name)}</small></button>`).join('')
       : '<div class="empty-sm">Нет категорий этого типа</div>';
+
+    if (isLoanCat(catId)){
+      loanField.style.display = '';
+      paintLoanChips();
+    } else {
+      loanField.style.display = 'none';
+      loanId = '';
+    }
   }
   paint();
 
@@ -776,6 +918,13 @@ function openTxSheet(tx){
     if (!b) return;
     catId = b.dataset.cid;
     paint();
+  });
+
+  loanChips.addEventListener('click', e => {
+    const b = e.target.closest('[data-lid]');
+    if (!b) return;
+    loanId = b.dataset.lid;
+    paintLoanChips();
   });
 
   sheetEl.querySelectorAll('[data-seg]').forEach(b => b.addEventListener('click', () => {
@@ -794,10 +943,14 @@ function openTxSheet(tx){
     const date = document.getElementById('txDate').value || todayStr();
     const comment = document.getElementById('txComment').value.trim();
 
+    const data = {type, amount, categoryId: catId, date, comment};
+    if (isLoanCat(catId) && loanId) data.loanId = loanId;
+
     if (isEdit){
-      Object.assign(tx, {type, amount, categoryId: catId, date, comment});
+      Object.assign(tx, data);
+      if (!data.loanId) delete tx.loanId;
     } else {
-      state.transactions.push({id:uid(), type, amount, categoryId: catId, date, comment, createdAt: Date.now()});
+      state.transactions.push({id:uid(), ...data, createdAt: Date.now()});
     }
     save(); closeSheet(); render();
   });
@@ -924,14 +1077,14 @@ function openLoanSheet(loan){
         </label>
       </div>
       <label class="field">
-        <span>Уже внесено, ₽ <em>(необязательно)</em></span>
+        <span>Уже внесено вручную, ₽ <em>(необязательно)</em></span>
         <input id="lPaid" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" value="${l.paid !== '' && l.paid != null ? l.paid : ''}">
       </label>
       <p class="hint">
-        Укажите общую сумму платежей, которые вы уже внесли до начала учёта.
-        Тогда остаток долга, число закрытых платежей и дата следующего платежа
-        будут рассчитаны от этой суммы. Если оставить пустым — платежи
-        до сегодняшней даты учитываются автоматически по графику.
+        Укажите сумму платежей, сделанных <b>до начала ведения учёта</b>.
+        Платежи, добавленные в приложении как расходы в категории «Кредиты»
+        и привязанные к этому кредиту, учитываются автоматически.
+        Итоговое «Внесено» = ручная сумма + привязанные операции.
       </p>
       <button class="btn primary" type="submit">${isEdit ? 'Сохранить' : 'Добавить кредит'}</button>
       ${isEdit ? '<button class="btn danger" type="button" id="delLoan" style="margin-top:10px">Удалить кредит</button>' : ''}
@@ -969,7 +1122,8 @@ function openLoanSheet(loan){
 
   const del = document.getElementById('delLoan');
   if (del) del.addEventListener('click', () => {
-    if (!confirm('Удалить кредит?')) return;
+    if (!confirm('Удалить кредит? Платежи останутся в операциях, но потеряют привязку.')) return;
+    state.transactions.forEach(t => { if (t.loanId === loan.id) delete t.loanId; });
     state.loans = state.loans.filter(x => x.id !== loan.id);
     save(); closeSheet(); render();
   });
@@ -984,6 +1138,14 @@ function openLoanInfo(l){
   const c = calcLoan(l);
   const fmtD = d => d.toLocaleDateString('ru-RU', {month:'short', year:'2-digit'});
 
+  const linkedTxs = state.transactions
+    .filter(t => t.loanId === l.id)
+    .sort((a,b) => a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+
+  const payNote = c.useAuto
+    ? 'Учтены платежи по графику до сегодняшней даты'
+    : `Внесено вручную: ${fmt(c.manualPaid)} · Операциями: ${fmt(c.linkedSum)} (${c.linkedCount})`;
+
   openSheet(`
     <div class="sheet-head">
       <h2>${esc(l.name)}</h2>
@@ -995,11 +1157,13 @@ function openLoanInfo(l){
       <div class="info"><small>Переплата</small><b>${fmt(c.overpay)}</b></div>
       <div class="info"><small>Всего выплат</small><b>${fmt(c.total)}</b></div>
       <div class="info"><small>Остаток долга</small><b>${fmt(c.rest)}</b></div>
-      <div class="info"><small>Уже внесено</small><b>${fmt(c.paid)}</b></div>
+      <div class="info"><small>Внесено всего</small><b>${fmt(c.paid)}</b></div>
       <div class="info"><small>Осталось платежей</small><b>${c.left} из ${l.months}</b></div>
     </div>
 
-    <div class="bar" style="margin:16px 0 8px"><i style="width:${c.pct}%"></i></div>
+    <p class="hint" style="text-align:center;margin:8px 0 0">${payNote}</p>
+
+    <div class="bar" style="margin:12px 0 8px"><i style="width:${c.pct}%"></i></div>
     <div class="progress-label">
       Выплачено ${c.pct.toFixed(0)}% ·
       ${c.nextDate
@@ -1017,6 +1181,17 @@ function openLoanInfo(l){
         </div>`).join('')}
     </div>
 
+    ${linkedTxs.length ? `
+      <h3 class="sub-h">Платежи в приложении (${linkedTxs.length})</h3>
+      <div class="sched" style="max-height:180px">
+        ${linkedTxs.map(t => `
+          <div class="sched-row">
+            <span class="d">${new Date(t.date + 'T00:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'2-digit'})}</span>
+            <span>${fmt(t.amount)}</span>
+            <span class="r">${t.comment ? esc(t.comment) : '—'}</span>
+          </div>`).join('')}
+      </div>` : ''}
+
     <button class="btn ghost" style="margin-top:14px" data-act="close">Закрыть</button>
   `);
 }
@@ -1029,8 +1204,10 @@ function handleAct(act, d){
     case 'close':       closeSheet(); break;
     case 'tab':         ui.tab = d.tab; render(); document.querySelector('.scroll').scrollTop = 0; break;
     case 'month':       ui.month = shiftMonth(ui.month, Number(d.d)); render(); break;
+    case 'year':        ui.month = shiftYear(ui.month, Number(d.d)); render(); break;
     case 'cat-type':    ui.catType = d.type; render(); break;
     case 'ana-type':    ui.anaType = d.type; render(); break;
+    case 'ana-period':  ui.anaPeriod = d.p; render(); break;
     case 'new-tx':      openTxSheet(null); break;
     case 'edit-tx':     openTxSheet(state.transactions.find(x => x.id === d.id)); break;
     case 'new-cat':     openCatSheet(null); break;
